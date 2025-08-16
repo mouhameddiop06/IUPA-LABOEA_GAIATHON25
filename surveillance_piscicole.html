@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surveillance Piscicole - 4 Caméras Live</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c1445 0%, #1a237e 50%, #283593 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(20px);
+            padding: 25px 0;
+            text-align: center;
+            border-bottom: 3px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shimmer 3s infinite;
+        }
+        
+        @keyframes shimmer {
+            0%, 100% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+        }
+        
+        .header h1 {
+            font-size: 3.2em;
+            font-weight: 800;
+            margin-bottom: 15px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.7);
+            background: linear-gradient(45deg, #ffffff, #64b5f6, #42a5f5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header p {
+            font-size: 1.4em;
+            opacity: 0.9;
+            font-weight: 300;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .status-bar {
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(15px);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .status-left {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 15px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .status-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 10px currentColor;
+        }
+        
+        .status-online { 
+            background: #00ff88;
+            color: #00ff88;
+        }
+        
+        .status-offline { 
+            background: #ff4444;
+            color: #ff4444;
+        }
+        
+        .status-connecting { 
+            background: #ffaa00;
+            color: #ffaa00;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { 
+                opacity: 1; 
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 0.6; 
+                transform: scale(0.8);
+            }
+        }
+        
+        .time-display {
+            font-size: 1.1em;
+            font-weight: 600;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        .cameras-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            height: calc(100vh - 300px);
+            min-height: 600px;
+        }
+        
+        .camera-container {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+            border: 2px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .camera-container:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border-color: rgba(100,181,246,0.5);
+        }
+        
+        .camera-header {
+            background: linear-gradient(135deg, rgba(0,0,0,0.6), rgba(0,0,0,0.4));
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .camera-title {
+            font-size: 1.3em;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+        }
+        
+        .camera-icon {
+            font-size: 1.5em;
+            margin-right: 12px;
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+        
+        .camera-info {
+            font-size: 0.85em;
+            opacity: 0.8;
+            text-align: right;
+        }
+        
+        .live-badge {
+            background: linear-gradient(45deg, #ff0000, #ff4444);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            animation: livePulse 1.5s infinite;
+            box-shadow: 0 0 15px rgba(255,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        @keyframes livePulse {
+            0%, 100% { 
+                opacity: 1; 
+                transform: scale(1);
+                box-shadow: 0 0 15px rgba(255,0,0,0.6);
+            }
+            50% { 
+                opacity: 0.8; 
+                transform: scale(0.95);
+                box-shadow: 0 0 25px rgba(255,0,0,0.8);
+            }
+        }
+        
+        .camera-stream {
+            position: relative;
+            height: calc(100% - 80px);
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .stream-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.3s ease;
+        }
+        
+        .camera-container:hover .stream-video {
+            transform: scale(1.05);
+        }
+        
+        .stream-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+        }
+        
+        .placeholder-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            opacity: 0.3;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .placeholder-text {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #ff6b6b;
+        }
+        
+        .placeholder-subtext {
+            font-size: 0.9em;
+            opacity: 0.7;
+            max-width: 200px;
+            line-height: 1.4;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid #64b5f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .stream-overlay {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 10;
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2em;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(100,181,246,0.8);
+            transform: scale(1.1);
+        }
+        
+        .controls {
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(15px);
+            padding: 20px;
+            text-align: center;
+            margin-top: 30px;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #1976d2, #42a5f5);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(25,118,210,0.3);
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(25,118,210,0.4);
+            background: linear-gradient(45deg, #1565c0, #1976d2);
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            margin-top: 40px;
+            opacity: 0.8;
+            font-size: 0.9em;
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        @media (max-width: 1200px) {
+            .cameras-grid {
+                grid-template-columns: 1fr 1fr;
+                height: auto;
+                min-height: 800px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .cameras-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                min-height: 1200px;
+            }
+            
+            .header h1 {
+                font-size: 2.5em;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .status-left {
+                justify-content: center;
+            }
+        }
+        
+        .fullscreen-mode {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background: #000 !important;
+            border-radius: 0 !important;
+        }
+        
+        .fullscreen-mode .camera-stream {
+            height: calc(100% - 60px) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐟 Surveillance Piscicole Avancée</h1>
+        <p>Système de monitoring 4 caméras en temps réel</p>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-left">
+            <div class="status-item">
+                <div class="status-dot" id="status1"></div>
+                <span>Bassin Principal</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="status2"></div>
+                <span>Zone Alimentation</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="status3"></div>
+                <span>Bassin Quarantaine</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="status4"></div>
+                <span>Zone Filtration</span>
+            </div>
+        </div>
+        <div class="time-display" id="currentTime"></div>
+    </div>
+    
+    <div class="container">
+        <div class="cameras-grid">
+            <!-- Caméra 1 -->
+            <div class="camera-container" onclick="toggleFullscreen(1)">
+                <div class="camera-header">
+                    <div class="camera-title">
+                        <span class="camera-icon">📹</span>
+                        Bassin Principal
+                    </div>
+                    <div class="camera-info">
+                        <div class="live-badge">● LIVE</div>
+                        <div style="margin-top: 5px; font-size: 0.8em;">192.168.x.x</div>
+                    </div>
+                </div>
+                <div class="camera-stream">
+                    <img id="stream1" class="stream-video" style="display: none;" alt="Caméra Bassin Principal">
+                    <div id="placeholder1" class="stream-placeholder">
+                        <div class="loading-spinner"></div>
+                        <div class="placeholder-text">Connexion en cours...</div>
+                        <div class="placeholder-subtext">Caméra Bassin Principal</div>
+                    </div>
+                    <div class="stream-overlay" id="overlay1">Connexion...</div>
+                    <button class="fullscreen-btn" onclick="event.stopPropagation(); toggleFullscreen(1)">⛶</button>
+                </div>
+            </div>
+            
+            <!-- Caméra 2 -->
+            <div class="camera-container" onclick="toggleFullscreen(2)">
+                <div class="camera-header">
+                    <div class="camera-title">
+                        <span class="camera-icon">📹</span>
+                        Zone Alimentation
+                    </div>
+                    <div class="camera-info">
+                        <div class="live-badge">● LIVE</div>
+                        <div style="margin-top: 5px; font-size: 0.8em;">192.168.x.x</div>
+                    </div>
+                </div>
+                <div class="camera-stream">
+                    <img id="stream2" class="stream-video" style="display: none;" alt="Caméra Zone Alimentation">
+                    <div id="placeholder2" class="stream-placeholder">
+                        <div class="loading-spinner"></div>
+                        <div class="placeholder-text">Connexion en cours...</div>
+                        <div class="placeholder-subtext">Caméra Zone Alimentation</div>
+                    </div>
+                    <div class="stream-overlay" id="overlay2">Connexion...</div>
+                    <button class="fullscreen-btn" onclick="event.stopPropagation(); toggleFullscreen(2)">⛶</button>
+                </div>
+            </div>
+            
+            <!-- Caméra 3 -->
+            <div class="camera-container" onclick="toggleFullscreen(3)">
+                <div class="camera-header">
+                    <div class="camera-title">
+                        <span class="camera-icon">📹</span>
+                        Bassin Quarantaine
+                    </div>
+                    <div class="camera-info">
+                        <div class="live-badge">● LIVE</div>
+                        <div style="margin-top: 5px; font-size: 0.8em;">192.168.x.x</div>
+                    </div>
+                </div>
+                <div class="camera-stream">
+                    <img id="stream3" class="stream-video" style="display: none;" alt="Caméra Bassin Quarantaine">
+                    <div id="placeholder3" class="stream-placeholder">
+                        <div class="loading-spinner"></div>
+                        <div class="placeholder-text">Connexion en cours...</div>
+                        <div class="placeholder-subtext">Caméra Bassin Quarantaine</div>
+                    </div>
+                    <div class="stream-overlay" id="overlay3">Connexion...</div>
+                    <button class="fullscreen-btn" onclick="event.stopPropagation(); toggleFullscreen(3)">⛶</button>
+                </div>
+            </div>
+            
+            <!-- Caméra 4 -->
+            <div class="camera-container" onclick="toggleFullscreen(4)">
+                <div class="camera-header">
+                    <div class="camera-title">
+                        <span class="camera-icon">📹</span>
+                        Zone Filtration
+                    </div>
+                    <div class="camera-info">
+                        <div class="live-badge">● LIVE</div>
+                        <div style="margin-top: 5px; font-size: 0.8em;">192.168.x.x</div>
+                    </div>
+                </div>
+                <div class="camera-stream">
+                    <img id="stream4" class="stream-video" style="display: none;" alt="Caméra Zone Filtration">
+                    <div id="placeholder4" class="stream-placeholder">
+                        <div class="loading-spinner"></div>
+                        <div class="placeholder-text">Connexion en cours...</div>
+                        <div class="placeholder-subtext">Caméra Zone Filtration</div>
+                    </div>
+                    <div class="stream-overlay" id="overlay4">Connexion...</div>
+                    <button class="fullscreen-btn" onclick="event.stopPropagation(); toggleFullscreen(4)">⛶</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="refreshAllStreams()">🔄 Actualiser Tout</button>
+            <button class="btn" onclick="captureAllScreenshots()">📸 Capturer Tout</button>
+            <button class="btn" onclick="togglePause()">⏸️ Pause/Play</button>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>Système de Surveillance Piscicole Professionnel v3.0 | Monitoring 24h/24 - 4 Caméras HD</p>
+        <p>Développé pour l'aquaculture moderne</p>
+    </div>
+
+    <script>
+        // Configuration des IPs des caméras - CORRIGÉ
+        const cameraIPs = {
+            1: '192.168.98.251',  // IP Caméra 1 
+            2: '192.168.255.133',  // IP Caméra 2 
+            3: '192.168.255.195',  // IP Caméra 3 
+            4: '192.168.98.190'   // IP Caméra 4 
+        };
+        
+        const cameraNames = {
+            1: 'Bassin Principal',
+            2: 'Zone Alimentation', 
+            3: 'Bassin Quarantaine',
+            4: 'Zone Filtration'
+        };
+        
+        let cameraStatus = {1: false, 2: false, 3: false, 4: false};
+        let isPaused = false;
+        
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = 
+                now.toLocaleString('fr-FR', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+        }
+        
+        function updateCameraIP(cameraId) {
+            const infoDiv = document.querySelector(`#stream${cameraId}`).closest('.camera-container').querySelector('.camera-info div:last-child');
+            infoDiv.textContent = cameraIPs[cameraId];
+        }
+        
+        function connectCamera(cameraId) {
+            if (isPaused) return;
+            
+            const stream = document.getElementById(`stream${cameraId}`);
+            const placeholder = document.getElementById(`placeholder${cameraId}`);
+            const overlay = document.getElementById(`overlay${cameraId}`);
+            const status = document.getElementById(`status${cameraId}`);
+            
+            // État de connexion
+            status.className = 'status-dot status-connecting';
+            overlay.textContent = `Connexion à ${cameraIPs[cameraId]}...`;
+            placeholder.innerHTML = `
+                <div class="loading-spinner"></div>
+                <div class="placeholder-text">Connexion en cours...</div>
+                <div class="placeholder-subtext">${cameraNames[cameraId]}</div>
+            `;
+            
+            const streamUrl = `http://${cameraIPs[cameraId]}/stream`;
+            
+            stream.onload = function() {
+                placeholder.style.display = 'none';
+                stream.style.display = 'block';
+                overlay.textContent = `${cameraNames[cameraId]} - En ligne`;
+                status.className = 'status-dot status-online';
+                cameraStatus[cameraId] = true;
+                
+                console.log(`Caméra ${cameraId} connectée: ${cameraIPs[cameraId]}`);
+            };
+            
+            stream.onerror = function() {
+                placeholder.style.display = 'flex';
+                stream.style.display = 'none';
+                placeholder.innerHTML = `
+                    <div class="placeholder-icon">📵</div>
+                    <div class="placeholder-text">Caméra hors ligne</div>
+                    <div class="placeholder-subtext">Impossible de se connecter à ${cameraIPs[cameraId]}<br>Vérifiez la connexion réseau</div>
+                `;
+                overlay.textContent = `${cameraNames[cameraId]} - Hors ligne`;
+                status.className = 'status-dot status-offline';
+                cameraStatus[cameraId] = false;
+                
+                console.log(`Caméra ${cameraId} hors ligne: ${cameraIPs[cameraId]}`);
+                
+                // Retry automatique après 10 secondes
+                setTimeout(() => connectCamera(cameraId), 10000);
+            };
+            
+            stream.src = streamUrl;
+        }
+        
+        function refreshAllStreams() {
+            console.log('Actualisation de toutes les caméras...');
+            for (let i = 1; i <= 4; i++) {
+                connectCamera(i);
+            }
+        }
+        
+        function toggleFullscreen(cameraId) {
+            const container = document.querySelector(`#stream${cameraId}`).closest('.camera-container');
+            
+            if (container.classList.contains('fullscreen-mode')) {
+                container.classList.remove('fullscreen-mode');
+                document.body.style.overflow = 'auto';
+            } else {
+                // Fermer les autres fullscreen
+                document.querySelectorAll('.fullscreen-mode').forEach(el => {
+                    el.classList.remove('fullscreen-mode');
+                });
+                
+                container.classList.add('fullscreen-mode');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        
+        function captureAllScreenshots() {
+            for (let i = 1; i <= 4; i++) {
+                if (cameraStatus[i]) {
+                    captureScreenshot(i);
+                }
+            }
+        }
+        
+        function captureScreenshot(cameraId) {
+            const stream = document.getElementById(`stream${cameraId}`);
+            if (!stream.src || !cameraStatus[cameraId]) {
+                alert(`La caméra ${cameraId} doit être connectée pour capturer`);
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = stream.naturalWidth;
+            canvas.height = stream.naturalHeight;
+            ctx.drawImage(stream, 0, 0);
+            
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `surveillance_${cameraNames[cameraId].replace(/\s+/g, '_')}_${new Date().getTime()}.jpg`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = event.target;
+            
+            if (isPaused) {
+                btn.textContent = '▶️ Reprendre';
+                // Arrêter tous les flux
+                for (let i = 1; i <= 4; i++) {
+                    const stream = document.getElementById(`stream${i}`);
+                    stream.src = '';
+                    document.getElementById(`overlay${i}`).textContent = `${cameraNames[i]} - En pause`;
+                }
+            } else {
+                btn.textContent = '⏸️ Pause/Play';
+                refreshAllStreams();
+            }
+        }
+        
+        // Gestion des touches clavier
+        document.addEventListener('keydown', function(e) {
+            switch(e.key) {
+                case 'Escape':
+                    document.querySelectorAll('.fullscreen-mode').forEach(el => {
+                        el.classList.remove('fullscreen-mode');
+                    });
+                    document.body.style.overflow = 'auto';
+                    break;
+                case 'r':
+                case 'R':
+                    refreshAllStreams();
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    togglePause();
+                    break;
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                    toggleFullscreen(parseInt(e.key));
+                    break;
+            }
+        });
+        
+        // Initialisation
+        function initSurveillance() {
+            console.log('Initialisation du système de surveillance...');
+            
+            // Mettre à jour les IPs affichées
+            for (let i = 1; i <= 4; i++) {
+                updateCameraIP(i);
+            }
+            
+            // Connecter toutes les caméras
+            refreshAllStreams();
+            
+            // Démarrer l'horloge
+            setInterval(updateTime, 1000);
+            updateTime();
+            
+            console.log('Système de surveillance initialisé');
+            console.log('Configuration:', cameraIPs);
+        }
+        
+        // Démarrage automatique
+        window.onload = initSurveillance;
+        
+        // Reconnexion automatique toutes les 30 secondes pour les caméras hors ligne
+        setInterval(() => {
+            if (!isPaused) {
+                for (let i = 1; i <= 4; i++) {
+                    if (!cameraStatus[i]) {
+                        connectCamera(i);
+                    }
+                }
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
