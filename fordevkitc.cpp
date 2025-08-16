@@ -15,6 +15,11 @@ const char* password = "Bir@ne2002";
 #define MLX90614_TA 0x06      // Température ambiante
 #define MLX90614_TOBJ1 0x07   // Température objet
 
+// Configuration capteur de luminosité
+#define LIGHT_SENSOR_PIN 34   // Pin analogique pour photorésistance
+#define ADC_MAX 4095          // Résolution ADC 12-bit
+#define VOLTAGE_REF 3.3       // Tension de référence
+
 WebServer server(80);
 
 // Variables globales
@@ -22,6 +27,7 @@ float ambientTemp = 0.0;
 float objectTemp = 0.0;
 float estimatedPH = 7.0;
 float estimatedDO = 8.0;
+float lightLevel = 0.0;        // Nouveau: niveau de luminosité en lux
 unsigned long lastReading = 0;
 const unsigned long READING_INTERVAL = 3000;
 
@@ -204,12 +210,12 @@ const char* htmlPage = R"rawliteral(
     <div class="container">
         <div class="header">
             <h1>🌊 Station Monitoring Aquatique</h1>
-            <p>Capteur infrarouge MLX90614 - Surveillance température et estimations</p>
+            <p>Capteurs MLX90614 + Luminosité - Surveillance complète de l'environnement aquatique</p>
         </div>
         
         <div class="warning">
-            <strong>Information:</strong> Capteur infrarouge MLX90614 détecté. Les valeurs pH et oxygène sont des estimations 
-            basées sur la température.
+            <strong>Information:</strong> Capteur infrarouge MLX90614 et photorésistance détectés. Les valeurs pH et oxygène sont des estimations 
+            basées sur la température. La luminosité est mesurée via capteur analogique.
         </div>
         
         <div class="status-bar">
@@ -222,6 +228,10 @@ const char* htmlPage = R"rawliteral(
                 <span>MLX90614 opérationnel</span>
             </div>
             <div class="status-item">
+                <div class="status-dot"></div>
+                <span>Capteur luminosité actif</span>
+            </div>
+            <div class="status-item">
                 <span>IP: %DEVICE_IP%</span>
             </div>
             <div class="status-item">
@@ -230,8 +240,8 @@ const char* htmlPage = R"rawliteral(
         </div>
         
         <div class="sensor-info">
-            <div><strong>Capteur:</strong> MLX90614 - Température infrarouge sans contact</div>
-            <div><strong>Précision:</strong> ±0.5°C | <strong>Plage:</strong> -70°C à +380°C</div>
+            <div><strong>Capteurs:</strong> MLX90614 (Température IR) + Photorésistance (Luminosité)</div>
+            <div><strong>Précision Temp:</strong> ±0.5°C | <strong>Plage:</strong> -70°C à +380°C | <strong>Luminosité:</strong> 0-10000 lux (estimé)</div>
         </div>
         
         <div class="metrics-grid">
@@ -253,6 +263,16 @@ const char* htmlPage = R"rawliteral(
                     <span class="metric-unit">°C</span>
                 </div>
                 <div class="metric-subtitle">Mesure infrarouge sans contact</div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-icon">💡</div>
+                <div class="metric-title">Luminosité</div>
+                <div class="metric-value">
+                    <span id="lightLevel">--</span>
+                    <span class="metric-unit">lux</span>
+                </div>
+                <div class="metric-subtitle">Capteur analogique (estimation)</div>
             </div>
             
             <div class="metric-card">
@@ -289,6 +309,7 @@ const char* htmlPage = R"rawliteral(
                 .then(data => {
                     document.getElementById('ambientTemp').textContent = data.ambientTemp.toFixed(1);
                     document.getElementById('objectTemp').textContent = data.objectTemp.toFixed(1);
+                    document.getElementById('lightLevel').textContent = Math.round(data.lightLevel);
                     document.getElementById('ph').textContent = data.ph.toFixed(1);
                     document.getElementById('oxygen').textContent = data.dissolvedO2.toFixed(1);
                     
@@ -308,6 +329,7 @@ const char* htmlPage = R"rawliteral(
             const data = {
                 ambient: document.getElementById('ambientTemp').textContent,
                 object: document.getElementById('objectTemp').textContent,
+                light: document.getElementById('lightLevel').textContent,
                 ph: document.getElementById('ph').textContent,
                 oxygen: document.getElementById('oxygen').textContent,
                 timestamp: new Date().toLocaleString('fr-FR')
@@ -353,6 +375,29 @@ float mlxTempConvert(uint16_t rawTemp) {
   return tempK - 273.15;
 }
 
+// Lecture et conversion luminosité
+float readLightLevel() {
+  int analogValue = analogRead(LIGHT_SENSOR_PIN);
+  
+  // Conversion ADC vers voltage
+  float voltage = (analogValue * VOLTAGE_REF) / ADC_MAX;
+  
+  // Conversion approximative vers lux (formule empirique)
+  // Cette formule peut être ajustée selon votre photorésistance
+  float lux = 0.0;
+  
+  if (voltage > 0.1) {
+    // Formule approximative pour conversion en lux
+    // Plus la tension est élevée, plus il y a de lumière
+    lux = (voltage / VOLTAGE_REF) * 10000.0; // Échelle 0-10000 lux
+    
+    // Courbe logarithmique pour une meilleure représentation
+    lux = pow(lux / 100.0, 1.5) * 100.0;
+  }
+  
+  return constrain(lux, 0.0, 10000.0);
+}
+
 // Estimation pH basée sur température
 float estimatePH(float temp) {
   float basePH = 7.2;
@@ -376,6 +421,7 @@ void handleApiData() {
   String json = "{";
   json += "\"ambientTemp\":" + String(ambientTemp, 2) + ",";
   json += "\"objectTemp\":" + String(objectTemp, 2) + ",";
+  json += "\"lightLevel\":" + String(lightLevel, 1) + ",";
   json += "\"ph\":" + String(estimatedPH, 2) + ",";
   json += "\"dissolvedO2\":" + String(estimatedDO, 2) + ",";
   json += "\"timestamp\":" + String(millis());
@@ -386,11 +432,15 @@ void handleApiData() {
 }
 
 void updateSensorReadings() {
+  // Lecture des capteurs de température
   uint16_t rawAmbient = readMLX90614(MLX90614_TA);
   uint16_t rawObject = readMLX90614(MLX90614_TOBJ1);
   
   ambientTemp = mlxTempConvert(rawAmbient);
   objectTemp = mlxTempConvert(rawObject);
+  
+  // Lecture du capteur de luminosité
+  lightLevel = readLightLevel();
   
   // Utiliser la température objet pour les estimations (plus représentative de l'eau)
   float referenceTemp = (objectTemp > -50) ? objectTemp : ambientTemp;
@@ -398,8 +448,8 @@ void updateSensorReadings() {
   estimatedPH = estimatePH(referenceTemp);
   estimatedDO = estimateDissolvedO2(referenceTemp);
   
-  Serial.printf("Ambiante: %.1f°C | Objet: %.1f°C | pH: %.1f | O2: %.1f mg/L\n", 
-                ambientTemp, objectTemp, estimatedPH, estimatedDO);
+  Serial.printf("Ambiante: %.1f°C | Objet: %.1f°C | Luminosité: %.0f lux | pH: %.1f | O2: %.1f mg/L\n", 
+                ambientTemp, objectTemp, lightLevel, estimatedPH, estimatedDO);
 }
 
 void setup() {
@@ -408,7 +458,10 @@ void setup() {
   Serial.begin(115200);
   delay(2000);
   
-  Serial.println("=== Station Monitoring MLX90614 ===");
+  Serial.println("=== Station Monitoring MLX90614 + Luminosité ===");
+  
+  // Configuration du pin analogique pour le capteur de luminosité
+  pinMode(LIGHT_SENSOR_PIN, INPUT);
   
   // Initialisation I2C
   Wire.begin(SDA_PIN, SCL_PIN);
